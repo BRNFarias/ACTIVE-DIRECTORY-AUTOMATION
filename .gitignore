@@ -1,0 +1,15 @@
+# Ambiente virtual
+venv/
+__pycache__/
+*.pyc
+
+# Arquivos temporários
+*.log
+*.xlsx
+*.xls
+temp_*
+
+# Configs locais
+.env
+.idea/
+.vscode/
