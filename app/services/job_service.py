@@ -16,7 +16,16 @@ def process_excel(file_path: str, db):
     # cria registro no banco
     new_job = Job(filename=os.path.basename(file_path), status="processado", created_at=datetime.utcnow())
 
+    # salvar no postgre
+    db.add(new_job)
+    db.commit()
+    db.refresh(new_job) # atualiza o objeto com o ID gerado pelo banco
+
     # log no Mongo
-    log_event("Job",f"Arquivo {new_job.filename} processado com sucesso")
+    try:
+        log_event("Job",f"Arquivo {new_job.filename} processado com sucesso")
+
+    except Exception as e:
+        print("Erro ao logar no Mongo:", e)
 
     return {"job_id": new_job.id, "rows": len(df), "status": "ok"}
