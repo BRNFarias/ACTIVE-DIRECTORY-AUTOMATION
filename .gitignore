@@ -1,15 +1,40 @@
 # Ambiente virtual
 venv/
+.env
+
+# Configurações locais e chaves
+*.env
+*.json
+
+# Arquivos temporários e cache do Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
-# Arquivos temporários
+# Logs
 *.log
-*.xlsx
-*.xls
-temp_*
+logs/
+*.sqlite3
 
-# Configs locais
-.env
-.idea/
+# Arquivos de upload temporários
+uploads/
+*.xls
+*.xlsx
+
+# VSCode
 .vscode/
+
+# Docker
+*.pid
+*.seed
+*.tar
+*.bak
+
+# Dependências geradas automaticamente
+dist/
+build/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
