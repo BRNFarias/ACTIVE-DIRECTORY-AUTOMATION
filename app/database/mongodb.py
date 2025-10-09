@@ -2,7 +2,7 @@ from pymongo import MongoClient
 from datetime import datetime
 
 client = MongoClient("mongodb://localhost:27017/")
-db = client["automacao_logs"]
+db = client["ad_logs"]
 logs_collection = db["logs"]
 
 def log_event(event_type: str, message: str):
