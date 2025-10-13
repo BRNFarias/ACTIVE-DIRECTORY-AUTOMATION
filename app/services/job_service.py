@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 from app.models.job import Job
 from app.database.mongodb import log_event
+from app.services.ad_service import connect_ad, create_user
 
 def process_excel(file_path: str, db):
     required_cols = ["Nome Completo", "CPF", "Inicio", "Fim"]
@@ -29,3 +30,12 @@ def process_excel(file_path: str, db):
         print("Erro ao logar no Mongo:", e)
 
     return {"job_id": new_job.id, "rows": len(df), "status": "ok"}
+
+# Integracao AD com o Job Service
+
+conn = connect_ad()
+if conn:
+    for index, row in df.iterrows():
+        username = row['CPF'] # Usar CPF como Login
+        password = "SenhaTemporaria123!" # Gerar automaticamente
+        create_user(conn, row['Nome Completo'], username, password)
