@@ -1,6 +1,0 @@
-fastapi[all]
-sqlalchemy
-psycopg2
-pymongo
-loguru
-prometheus-client
