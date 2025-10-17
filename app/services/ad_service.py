@@ -3,15 +3,15 @@ from ldap3.core.exceptions import LDAPException
 
 
 # configuração do AD
-AD_SERVER = "172.16.58." # IP DO WINDOWS Server
-AD_USER = "XUPISCO\\Administrador" # Usuario com permissao
+AD_SERVER = "172.16.58.43" # IP DO WINDOWS Server
 AD_PASSWORD = "Senai@134"
-BASE_DN = "DC=xupisco,DC=com,DC=br" # Base do dominio
+AD_USER = "SKYNEX\\breno" # Usuario com permissao
+BASE_DN = "DC=skynex, DC=local" # Base do dominio
 
 def connect_ad():
     try:
-        Server = Server(AD_SERVER, get_info=ALL)
-        conn = Connection(Server, user=AD_USER, password=AD_PASSWORD, authentication=NTLM, auto_bind=True)
+        ad_server = Server(AD_SERVER, get_info=ALL)
+        conn = Connection(ad_server, user=AD_USER, password=AD_PASSWORD, authentication=NTLM, auto_bind=True)
         return conn
     except LDAPException as e:
         print(f"Erro ao conectar ao AD: {e}")
