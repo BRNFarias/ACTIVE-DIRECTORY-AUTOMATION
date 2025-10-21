@@ -1,7 +1,7 @@
 from pymongo import MongoClient
 from datetime import datetime
 
-client = MongoClient("mongodb://localhost:27017/")
+client = MongoClient("mongodb://172.17.0.3:27017/")
 db = client["ad_logs"]
 logs_collection = db["logs"]
 
