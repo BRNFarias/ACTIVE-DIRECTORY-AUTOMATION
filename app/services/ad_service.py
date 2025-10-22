@@ -1,5 +1,8 @@
 from ldap3 import Server, Connection, ALL, NTLM, MODIFY_REPLACE
 from ldap3.core.exceptions import LDAPException
+import ldap3
+
+ldap3.HASH_MD4_NOT_SUPPORTED = True
 
 
 # configuração do AD
@@ -10,8 +13,8 @@ BASE_DN = "DC=skynex, DC=local" # Base do dominio
 
 def connect_ad():
     try:
-        ad_server = Server(AD_SERVER, get_info=ALL)
-        conn = Connection(ad_server, user=AD_USER, password=AD_PASSWORD, authentication=NTLM, auto_bind=True)
+        ad_server = Server(AD_SERVER,port=636, use_ssl=True, get_info=ALL)
+        conn = Connection(ad_server, user=AD_USER, password=AD_PASSWORD, authentication="SIMPLE", auto_bind=True)
         return conn
     except LDAPException as e:
         print(f"Erro ao conectar ao AD: {e}")
