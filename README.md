@@ -43,10 +43,10 @@ Edite as seguintes constantes no topo do arquivo com as suas próprias credencia
 # app/services/ad_service.py
 
 # --- CONFIGURE ESTAS VARIÁVEIS ---
-AD_SERVER = "172.16.58.43"  # COLOQUE O IP DO SEU SERVIDOR AD
-AD_PASSWORD = "Senai@134"   # COLOQUE A SENHA DO SEU USUÁRIO AD
-AD_USER = "SKYNEX\breno"   # COLOQUE O SEU USUÁRIO AD (formato DOMINIO\usuario)
-BASE_DN = "OU=Usuarios Ativos,DC=skynex,DC=local"  # CAMINHO ONDE OS USUÁRIOS SERÃO CRIADOS
+AD_SERVER = ""  # COLOQUE O IP DO SEU SERVIDOR AD
+AD_PASSWORD = ""   # COLOQUE A SENHA DO SEU USUÁRIO AD
+AD_USER = "DOMINIO\usuario"   # COLOQUE O SEU USUÁRIO AD (formato DOMINIO\usuario)
+BASE_DN = "OU=Nome_Unidade_Organizacional,DC=seu_dominio,DC=local"  # CAMINHO ONDE OS USUÁRIOS SERÃO CRIADOS
 # --- FIM DA CONFIGURAÇÃO ---
 ```
 
