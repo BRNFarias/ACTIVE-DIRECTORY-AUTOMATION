@@ -1,5 +1,4 @@
-from ldap3 import Server, Connection, ALL, NTLM, MODIFY_REPLACE
-from ldap3.constants import SEARCH_SCOPE_WHOLE_SUBTREE # <-- ESTA É A CORREÇÃO
+from ldap3 import Server, Connection, ALL, NTLM, MODIFY_REPLACE, SUBTREE
 from ldap3.core.exceptions import LDAPException
 from datetime import datetime
 
@@ -28,44 +27,46 @@ def _datetime_to_ldap_timestamp(dt: datetime) -> str:
 def create_or_update_user(conn, nome, username, password, fim_date: datetime):
     
     expiration_timestamp = _datetime_to_ldap_timestamp(fim_date)
-
     nome_parts = nome.split()
     givenName = nome_parts[0]
     sn = " ".join(nome_parts[1:]) if len(nome_parts) > 1 else nome_parts[0]
 
-    # 1. Verifica se o usuário (pelo CPF/username) já existe
+    # 1. Verifica se o usuário já existe
     conn.search(search_base=BASE_DN,
                 search_filter=f'(sAMAccountName={username})',
-                search_scope=SEARCH_SCOPE_WHOLE_SUBTREE,
-                attributes=['dn'])
+                search_scope=SUBTREE,
+                attributes=[]) 
 
     # 2. SE O USUÁRIO JÁ EXISTE (LÓGICA DE REATIVAÇÃO)
     if len(conn.entries) > 0:
-        user_dn = conn.entries[0].dn
+        user_dn = conn.entries[0].dn 
         print(f"\n--- USUÁRIO EXISTENTE ENCONTRADO (Reativando) ---")
         
         changes = {
             'accountExpires': [(MODIFY_REPLACE, [expiration_timestamp])], 
-            'userAccountControl': [(MODIFY_REPLACE, [512])], 
+            'userAccountControl': [(MODIFY_REPLACE, [512])], # 512 = Habilitado
             'displayName': [(MODIFY_REPLACE, [nome])], 
             'givenName': [(MODIFY_REPLACE, [givenName])], 
             'sn': [(MODIFY_REPLACE, [sn])]
         }
-
+        
         try:
-            conn.modify(user_dn, changes)
+            print("  ... Definindo senha...")
+            conn.extend.microsoft.modify_password(user_dn, password)
             
-            print("  ... Redefinindo senha (forçando troca no login)...")
-            conn.extend.microsoft.modify_password(user_dn, password, must_change_password=True)
+            print("  ... Aplicando modificações (Habilitando e atualizando dados)...")
+            conn.modify(user_dn, changes)
             
             print(f"Usuario {nome} reativado e atualizado com sucesso!")
             return True
         except LDAPException as e:
+             # Tenta a lógica de renomear se a modificação falhar
              try:
-                 print("  ... Falha na modificação, tentando renomear CN...")
+                 print(f"  ... Falha na modificação ({e}), tentando renomear CN...")
                  conn.modify_dn(user_dn, f'CN={nome}')
+                 # Tenta modificar novamente após renomear
                  conn.modify(f"CN={nome},{BASE_DN}", changes)
-                 conn.extend.microsoft.modify_password(f"CN={nome},{BASE_DN}", password, must_change_password=True)
+                 conn.extend.microsoft.modify_password(f"CN={nome},{BASE_DN}", password)
                  print(f"Usuario {nome} reativado e RENOMEADO com sucesso!")
                  return True
              except Exception as ex:
@@ -75,7 +76,6 @@ def create_or_update_user(conn, nome, username, password, fim_date: datetime):
     # 3. SE O USUÁRIO NÃO EXISTE (LÓGICA DE CRIAÇÃO)
     else:
         dn = f"CN={nome},{BASE_DN}" 
-                
         attributes = {
             "givenName": givenName,
             "sn": sn,
@@ -90,35 +90,29 @@ def create_or_update_user(conn, nome, username, password, fim_date: datetime):
             print("\n--- INICIANDO CREATE_USER (Novo) ---")
             
             # Etapa 1: Adiciona o usuário (desabilitado)
+            print(f"  Etapa 1: Adicionando DN '{dn}'...")
             conn.add(dn, ['top', 'person', 'organizationalPerson', 'user'], attributes)
+            if not conn.result['description'] == 'success':
+                raise LDAPException(f"Falha na Etapa 1 (conn.add): {conn.result}")
             
             # Etapa 2: Define Senha
-            print("  ... Definindo senha (forçando troca no login)...")
-            conn.extend.microsoft.modify_password(dn, password, must_change_password=True)
+            print("  Etapa 2: Definindo senha...")
+            conn.extend.microsoft.modify_password(dn, password)
             
             # Etapa 3: Habilita a conta
-            print("  ... Habilitando conta...")
+            print("  Etapa 3: Habilitando conta (mudando para 512)...")
             conn.modify(dn, {'userAccountControl': [(MODIFY_REPLACE, [512])]})
+            if not conn.result['description'] == 'success':
+                 raise LDAPException(f"Falha na Etapa 3 (conn.modify - Ativação): {conn.result}")
             
             print(f"Usuario {nome} criado com sucesso!")
             return True
         except LDAPException as e:
             print(f"Erro ao criar usuario: {e}")
+            # Se a criação falhou, tenta apagar o objeto "fantasma" para limpar
+            try:
+                conn.delete(dn)
+                print(f"  ... Objeto 'fantasma' {nome} limpo com sucesso.")
+            except:
+                pass # Ignora se a limpeza falhar
             return False
-
-# Deletar usuario no AD
-def delete_user(conn, username):
-    conn.search(search_base=BASE_DN,
-                search_filter=f'(sAMAccountName={username})',
-                search_scope=SEARCH_SCOPE_WHOLE_SUBTREE,
-                attributes=['dn'])
-    
-    if len(conn.entries) > 0:
-        user_dn = conn.entries[0].dn
-        try:
-            conn.delete(user_dn)
-            print(f"Usuario {username} deletado com sucesso!")
-        except LDAPException as e:
-            print(f"Erro ao deletar usuario: {e}")
-    else:
-        print(f"Erro: Usuário {username} não encontrado para deleção.")
