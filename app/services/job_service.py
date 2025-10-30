@@ -9,8 +9,15 @@ from app.services.ad_service import connect_ad, create_or_update_user
 def process_excel(file_path: str, db):
     required_cols = ["Nome Completo", "CPF", "Inicio", "Fim"]
 
-    # Leitura da planilha
-    df = pd.read_excel(file_path, dtype=str) # Lê tudo como string primeiro
+    # --- INÍCIO DA CORREÇÃO ---
+    # 1. Lê a planilha. Força APENAS o CPF a ser string.
+    #    O Pandas irá converter automaticamente as colunas de data.
+    try:
+        df = pd.read_excel(file_path, dtype={'CPF': str})
+    except Exception as e:
+        log_event("Erro", f"Falha ao ler o arquivo Excel: {e}")
+        raise ValueError(f"Falha ao ler o arquivo Excel: {e}")
+    # --- FIM DA CORREÇÃO ---
 
     if not all(col in df.columns for col in required_cols):
         log_event("Erro", f"Arquivo invalido: colunas obrigatorias ausentes ({file_path})")
@@ -45,14 +52,16 @@ def process_excel(file_path: str, db):
                 # 2. Limpa o Nome (remove espaços extras)
                 nome_completo_limpo = " ".join(str(row['Nome Completo']).split())
 
-                # 3. LÊ A DATA DE FIM
-                try:
-                    # Converte a data da planilha (ex: 10/10/2025) para datetime
-                    fim_date = pd.to_datetime(row['Fim'], format='%d/%m/%Y')
-                except ValueError:
-                    print(f"Ignorando linha {index+1}: Data de Fim '{row['Fim']}' em formato inválido (esperado DD/MM/AAAA).")
+                # --- INÍCIO DA CORREÇÃO ---
+                # 3. LÊ A DATA DE FIM (que o Pandas já converteu)
+                fim_date = row['Fim']
+                
+                # Verifica se a data é inválida ou vazia (NaT = Not a Time)
+                if pd.isna(fim_date):
+                    print(f"Ignorando linha {index+1}: Data de Fim está em branco ou inválida.")
                     usuarios_falhados += 1
                     continue
+                # --- FIM DA CORREÇÃO ---
 
                 # Ignora linhas onde o CPF ou Nome estão vazios
                 if not username_limpo or not nome_completo_limpo:
@@ -67,7 +76,7 @@ def process_excel(file_path: str, db):
                                                 nome_completo_limpo, 
                                                 username_limpo, 
                                                 password, 
-                                                fim_date) # Passa a data de expiração
+                                                fim_date) # Passa o objeto datetime
                 
                 if sucesso:
                     usuarios_sucesso += 1
