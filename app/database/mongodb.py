@@ -1,12 +1,11 @@
 from pymongo import MongoClient
 from datetime import datetime
-import os # <-- 1. Importe o 'os'
+import os # <-- Adicione isto
 
-# 2. Pegue a URL do Mongo da variável de ambiente
-MONGO_URL = os.getenv("MONGO_URL") 
+# Substitua a URL hardcoded por esta:
+MONGO_URL = os.getenv("MONGO_URL")
+client = MongoClient(MONGO_URL)
 
-# 3. Use a variável MONGO_URL para se conectar
-client = MongoClient(MONGO_URL) 
 db = client["ad_logs"]
 logs_collection = db["logs"]
 

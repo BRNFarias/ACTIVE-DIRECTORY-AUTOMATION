@@ -1,41 +1,29 @@
-# Ambiente virtual
+# Ambiente Virtual
 venv/
+.venv/
+
+# Ficheiros de Configuração Secreta
 .env
+.env.*
 
-# Configurações locais e chaves
-*.env
-*.json
+# Pasta SSL (Contém chaves privadas)
+ssl/
 
-# Arquivos temporários e cache do Python
+# Ficheiros temporários e cache do Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
 
 # Logs
 *.log
 logs/
-*.sqlite3
 
-# Arquivos de upload temporários
-uploads/
-*.xls
-*.xlsx
-
-# VSCode
+# Configurações de IDE
 .vscode/
+.idea/
 
-# Docker
-*.pid
-*.seed
-*.tar
-*.bak
-
-# Dependências geradas automaticamente
-dist/
-build/
-
-# Sistema operacional
+# Sistema Operacional
 .DS_Store
 Thumbs.db
-index.html
