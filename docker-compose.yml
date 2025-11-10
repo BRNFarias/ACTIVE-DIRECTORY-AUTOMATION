@@ -1,0 +1,87 @@
+services:
+  # --- SUA APLICAÇÃO ---
+  api:
+    build: .
+    container_name: active-automation
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://admin:admin@postgres-db:5432/ad_jobs
+      - MONGO_URL=mongodb://mongo-db:27017/
+      # Ajuste o IP do AD aqui se necessário, ou use .env
+      # - AD_SERVER=172.16.58.43
+    depends_on:
+      - postgres-db
+      - mongo-db
+    networks:
+      - ad_net
+
+  # --- BANCOS DE DADOS ---
+  postgres-db:
+    image: postgres:15-alpine
+    container_name: postgres-db
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=ad_jobs
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ad_net
+
+  mongo-db:
+    image: mongo:6.0
+    container_name: mongo-db
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - ad_net
+
+  # --- MONITORAMENTO ---
+  # 1. MongoDB Exporter (Extrai métricas do Mongo para o Prometheus)
+  mongo-exporter:
+    image: percona/mongodb_exporter:0.40
+    container_name: mongo-exporter
+    command:
+      - '--mongodb.uri=mongodb://mongo-db:27017'
+    depends_on:
+      - mongo-db
+    networks:
+      - ad_net
+
+  # 2. Prometheus (Coleta e armazena as métricas)
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - ad_net
+
+  # 3. Grafana (Visualização)
+  grafana:
+    image: grafana/grafana:10.0.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin # Senha inicial
+    depends_on:
+      - prometheus
+    networks:
+      - ad_net
+
+volumes:
+  postgres_data:
+  mongo_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  ad_net:
+    driver: bridge

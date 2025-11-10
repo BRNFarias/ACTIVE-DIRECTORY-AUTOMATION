@@ -5,6 +5,7 @@ from app.routes import auth_routes
 from dotenv import load_dotenv
 import os
 from fastapi.middleware.cors import CORSMiddleware # <-- IMPORTANTE
+from prometheus_client import make_asgi_app
 
 load_dotenv()
 
@@ -34,6 +35,11 @@ app.add_middleware(
 )
 # --- FIM DO CORS ---
 
+
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
+
+# ... resto das rotas ...
 # Registra as rotas
 app.include_router(job_routes.router)
 app.include_router(user_routes.router) 
