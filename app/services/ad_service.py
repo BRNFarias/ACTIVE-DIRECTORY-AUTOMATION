@@ -1,23 +1,18 @@
 from ldap3 import Server, Connection, ALL, NTLM, MODIFY_REPLACE, SUBTREE
 from ldap3.core.exceptions import LDAPException
 from datetime import datetime
-import ldap3 # <-- 1. IMPORTAR A BIBLIOTECA PRINCIPAL
-import os # <-- Adicione isto
+import ldap3 # <-- Importa a biblioteca para a correção do MD4
 
-# --- INÍCIO DA CORREÇÃO ---
-# Substitua as constantes hardcoded por leituras do .env
-AD_SERVER = os.getenv("AD_SERVER")
-AD_PASSWORD = os.getenv("AD_PASSWORD")
-AD_USER = os.getenv("AD_USER")
-BASE_DN = os.getenv("AD_BASE_DN")
-# --- FIM DA CORREÇÃO ---
-DOMAIN_BASE_DN = BASE_DN.split(',', 1)[-1]
-
-# --- INÍCIO DA CORREÇÃO (MD4) ---
-# 2. Força o ldap3 a usar o seu próprio hash MD4 interno,
-#    pois o OpenSSL do contentor Docker não o suporta.
+# --- Correção do MD4 (para o Login NTLM funcionar) ---
 ldap3.HASH_MD4_NOT_SUPPORTED = True
-# --- FIM DA CORREÇÃO ---
+
+# --- CONFIGURAÇÃO ---
+AD_SERVER = "172.16.58.43" # IP DO WINDOWS Server
+AD_PASSWORD = "Senai@134"
+AD_USER = "SKYNEX\\breno" # Usuario com permissao
+BASE_DN = "OU=Usuarios Ativos,DC=skynex,DC=local" # Onde os utilizadores serão criados
+# Pega a raiz do domínio (ex: DC=skynex,DC=local) para pesquisas globais
+DOMAIN_BASE_DN = BASE_DN.split(',', 1)[-1] 
 
 def connect_ad():
     """ Conecta-se ao AD com as credenciais de serviço. """
@@ -31,11 +26,12 @@ def connect_ad():
 
 # --- FUNÇÃO AUXILIAR PARA A DATA DE EXPIRAÇÃO ---
 def _datetime_to_ldap_timestamp(dt: datetime) -> str:
+    """ Converte um objeto datetime do Python para o formato FILETIME do AD. """
     epoch_as_filetime = 116444736000000000
     filetime = int(dt.timestamp() * 10000000) + epoch_as_filetime
     return str(filetime)
 
-# --- FUNÇÃO 1: LOGIN (LÓGICA INVERTIDA E CORRIGIDA) ---
+# --- FUNÇÃO 1: LOGIN (Para o Front-end) ---
 def check_user_credentials(user_email, user_password):
     """ Tenta autenticar um usuário no AD (SIMPLE ou NTLM). """
     if not user_password:
@@ -44,25 +40,20 @@ def check_user_credentials(user_email, user_password):
     conn = None
     auth_method = None
     
-    # O utilizador pode digitar "izaias" ou "izaias@skynex.local"
-    # O UPN (com @) é o método preferido.
     user_upn = user_email
     
     if "@" not in user_email:
-        # Se o utilizador digitou apenas o nome (ex: "izaias"), 
-        # nós construímos o UPN (ex: "izaias@skynex.local")
         domain_suffix = DOMAIN_BASE_DN.replace('DC=', '').replace(',', '.')
         user_upn = f"{user_email}@{domain_suffix}"
     
     try:
-        # --- INÍCIO DA CORREÇÃO ---
         # Tentativa 1: SIMPLE (Funciona para utilizadores normais)
         print(f"Tentando login SIMPLE para {user_upn}...")
         conn = Connection(
             Server(AD_SERVER, get_info=ALL), 
             user=user_upn, 
             password=user_password, 
-            authentication="SIMPLE", # <-- TENTA SIMPLE PRIMEIRO
+            authentication="SIMPLE", 
             auto_bind=True
         )
         auth_method = "SIMPLE"
@@ -75,18 +66,16 @@ def check_user_credentials(user_email, user_password):
                 Server(AD_SERVER, get_info=ALL), 
                 user=user_upn, # NTLM também aceita UPN
                 password=user_password, 
-                authentication=NTLM, # <-- TENTA NTLM
+                authentication=NTLM, 
                 auto_bind=True
             )
             auth_method = "NTLM"
             print("Login NTLM bem-sucedido.")
         except LDAPException as e_ntlm:
-            # Se ambos falharem, as credenciais estão erradas
             print(f"Falha na tentativa de login (SIMPLE e NTLM) para {user_email}: {e_ntlm}")
             return None
-    # --- FIM DA CORREÇÃO ---
 
-    # Se chegamos aqui, o login (ou SIMPLE ou NTLM) funcionou.
+    # Se o login funcionou, busca os detalhes
     try:
         search_filter = f'(&(objectClass=user)(userPrincipalName={user_upn}))'
         
@@ -96,14 +85,13 @@ def check_user_credentials(user_email, user_password):
                     attributes=['displayName', 'sAMAccountName', 'userPrincipalName'])
         
         if not conn.entries:
-             print(f"Login bem-sucedido ({auth_method}) para {user_email}, mas não foi possível encontrar os detalhes da conta.")
-             # Tenta procurar pelo sAMAccountName como fallback
              conn.search(search_base=DOMAIN_BASE_DN, 
                     search_filter=f'(&(objectClass=user)(sAMAccountName={user_email.split("@")[0]}))',
                     search_scope=SUBTREE,
                     attributes=['displayName', 'userPrincipalName', 'sAMAccountName'])
              if not conn.entries:
-                 return {"nome": user_email, "email": user_upn, "cpf": user_email.split('@')[0]}
+                print(f"Login bem-sucedido ({auth_method}) para {user_email}, mas não foi possível encontrar os detalhes da conta.")
+                return {"nome": user_email, "email": user_upn, "cpf": user_email.split('@')[0]}
         
         user_entry = conn.entries[0]
         
@@ -119,6 +107,7 @@ def check_user_credentials(user_email, user_password):
 
 # --- FUNÇÃO 2: LISTAR UTILIZADORES (Para o Front-end) ---
 def list_users(conn):
+    """ Lista os usuários da OU base, retornando nome, cpf e status. """
     try:
         conn.search(search_base=BASE_DN,
                     search_filter='(objectClass=user)',
@@ -164,6 +153,7 @@ def create_or_update_user(conn, nome, username, password, fim_date: datetime):
             'displayName': [(MODIFY_REPLACE, [nome])], 
             'givenName': [(MODIFY_REPLACE, [givenName])], 
             'sn': [(MODIFY_REPLACE, [sn])]
+            # Nota: Não tentamos ativar (userAccountControl) para evitar erros de permissão
         }
         
         try:
@@ -201,6 +191,7 @@ def create_or_update_user(conn, nome, username, password, fim_date: datetime):
         try:
             print("\n--- INICIANDO CREATE_USER (Novo) ---")
             
+            # Etapa 1: Adiciona o usuário (desabilitado)
             print(f"  Etapa 1: Adicionando DN '{dn}'...")
             conn.add(dn, ['top', 'person', 'organizationalPerson', 'user'], attributes)
             if not conn.result['description'] == 'success':
