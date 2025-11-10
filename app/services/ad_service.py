@@ -1,8 +1,12 @@
 from ldap3 import Server, Connection, ALL, NTLM, MODIFY_REPLACE, SUBTREE
 from ldap3.core.exceptions import LDAPException
 from datetime import datetime
+import ldap3 # <-- Importa a biblioteca para a correção do MD4
 
-# --- CONFIGURAÇÃO (igual a antes) ---
+# --- Correção do MD4 (para o Login NTLM funcionar) ---
+ldap3.HASH_MD4_NOT_SUPPORTED = True
+
+# --- CONFIGURAÇÃO ---
 AD_SERVER = "172.16.58.43" # IP DO WINDOWS Server
 AD_PASSWORD = "Senai@134"
 AD_USER = "SKYNEX\\breno" # Usuario com permissao
@@ -29,43 +33,77 @@ def _datetime_to_ldap_timestamp(dt: datetime) -> str:
 
 # --- FUNÇÃO 1: LOGIN (Para o Front-end) ---
 def check_user_credentials(user_email, user_password):
-    """ Tenta autenticar um usuário no AD com as credenciais fornecidas. """
+    """ Tenta autenticar um usuário no AD (SIMPLE ou NTLM). """
     if not user_password:
         return None
+
+    conn = None
+    auth_method = None
+    
+    user_upn = user_email
+    
+    if "@" not in user_email:
+        domain_suffix = DOMAIN_BASE_DN.replace('DC=', '').replace(',', '.')
+        user_upn = f"{user_email}@{domain_suffix}"
+    
     try:
-        # Tenta conectar (bind) como o usuário
+        # Tentativa 1: SIMPLE (Funciona para utilizadores normais)
+        print(f"Tentando login SIMPLE para {user_upn}...")
         conn = Connection(
             Server(AD_SERVER, get_info=ALL), 
-            user=user_email, 
+            user=user_upn, 
             password=user_password, 
             authentication="SIMPLE", 
             auto_bind=True
         )
+        auth_method = "SIMPLE"
+        print("Login SIMPLE bem-sucedido.")
+    except LDAPException as e_simple:
+        # Se SIMPLE falhar (pode acontecer com Admins), tenta NTLM
+        print(f"SIMPLE falhou ({e_simple}), tentando NTLM com {user_upn}...")
+        try:
+            conn = Connection(
+                Server(AD_SERVER, get_info=ALL), 
+                user=user_upn, # NTLM também aceita UPN
+                password=user_password, 
+                authentication=NTLM, 
+                auto_bind=True
+            )
+            auth_method = "NTLM"
+            print("Login NTLM bem-sucedido.")
+        except LDAPException as e_ntlm:
+            print(f"Falha na tentativa de login (SIMPLE e NTLM) para {user_email}: {e_ntlm}")
+            return None
+
+    # Se o login funcionou, busca os detalhes
+    try:
+        search_filter = f'(&(objectClass=user)(userPrincipalName={user_upn}))'
         
-        # Se o bind foi bem-sucedido, busca os detalhes desse usuário
         conn.search(search_base=DOMAIN_BASE_DN, 
-                    search_filter=f'(&(objectClass=user)(userPrincipalName={user_email}))',
+                    search_filter=search_filter,
                     search_scope=SUBTREE,
                     attributes=['displayName', 'sAMAccountName', 'userPrincipalName'])
         
         if not conn.entries:
              conn.search(search_base=DOMAIN_BASE_DN, 
-                    search_filter=f'(&(objectClass=user)(sAMAccountName={user_email}))',
+                    search_filter=f'(&(objectClass=user)(sAMAccountName={user_email.split("@")[0]}))',
                     search_scope=SUBTREE,
                     attributes=['displayName', 'userPrincipalName', 'sAMAccountName'])
              if not conn.entries:
-                print(f"Login bem sucedido para {user_email}, mas não foi possível encontrar os detalhes da conta.")
-                return None
+                print(f"Login bem-sucedido ({auth_method}) para {user_email}, mas não foi possível encontrar os detalhes da conta.")
+                return {"nome": user_email, "email": user_upn, "cpf": user_email.split('@')[0]}
         
         user_entry = conn.entries[0]
+        
         return {
             "nome": str(user_entry.displayName),
-            "email": str(user_entry.userPrincipalName) if 'userPrincipalName' in user_entry else user_email,
+            "email": str(user_entry.userPrincipalName) if 'userPrincipalName' in user_entry else user_upn,
             "cpf": str(user_entry.sAMAccountName)
         }
-    except LDAPException as e:
-        print(f"Falha na tentativa de login para {user_email}: {e}")
-        return None
+    except Exception as e_search:
+        print(f"Erro ao buscar detalhes do usuário após login: {e_search}")
+        return {"nome": user_email, "email": user_upn, "cpf": user_email.split('@')[0]}
+
 
 # --- FUNÇÃO 2: LISTAR UTILIZADORES (Para o Front-end) ---
 def list_users(conn):
@@ -92,7 +130,7 @@ def list_users(conn):
         print(f"Erro ao listar usuários: {e}")
         return []
 
-# --- FUNÇÃO 3: CRIAR/ATUALIZAR (Lógica principal "Desativado") ---
+# --- FUNÇÃO 3: CRIAR/ATUALIZAR (Lógica "Desativado") ---
 def create_or_update_user(conn, nome, username, password, fim_date: datetime):
     
     expiration_timestamp = _datetime_to_ldap_timestamp(fim_date)
@@ -115,6 +153,7 @@ def create_or_update_user(conn, nome, username, password, fim_date: datetime):
             'displayName': [(MODIFY_REPLACE, [nome])], 
             'givenName': [(MODIFY_REPLACE, [givenName])], 
             'sn': [(MODIFY_REPLACE, [sn])]
+            # Nota: Não tentamos ativar (userAccountControl) para evitar erros de permissão
         }
         
         try:
