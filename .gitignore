@@ -27,3 +27,9 @@ logs/
 # Sistema Operacional
 .DS_Store
 Thumbs.db
+
+# Ficheiros zip e tar
+*.zip
+*.tar
+*.tar.gz
+*.rar
