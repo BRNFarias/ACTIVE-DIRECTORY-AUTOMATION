@@ -4,6 +4,7 @@ services:
   # ============================
   api:
     build: .
+    platform: linux/amd64
     container_name: active-automation
     ports:
       - "8000:8000"
