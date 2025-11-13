@@ -33,3 +33,6 @@ Thumbs.db
 *.tar
 *.tar.gz
 *.rar
+
+# Ficheiro de certificado
+*.cer
