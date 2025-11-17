@@ -1,0 +1,119 @@
+version: "3.8"
+
+services:
+  # ============================
+  # 1. API FASTAPI
+  # ============================
+  api:
+    build: .
+    platform: linux/amd64
+    container_name: active-automation
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://admin:admin@postgres-db:5432/ad_jobs
+      - MONGO_URL=mongodb://admin:admin@mongo-db:27017/
+    depends_on:
+      - postgres-db
+      - mongo-db
+    networks:
+      - ad_net
+
+  # ============================
+  # 2. POSTGRES
+  # ============================
+  postgres-db:
+    image: postgres:15-alpine
+    container_name: postgres-db
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=ad_jobs
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ad_net
+
+  # ============================
+  # 3. MONGODB
+  # ============================
+  mongo-db:
+    image: mongo:6.0
+    container_name: mongo-db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=admin
+    volumes:
+      - mongo_data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+      - ./mongo_logs:/var/log/mongodb
+    command: >
+      mongod --logpath /var/log/mongodb/mongod.log
+             --logappend
+    ports:
+      - "27017:27017"
+    networks:
+      - ad_net
+
+  # ============================
+  # 4. LOKI (LOG STORAGE)
+  # ============================
+  loki:
+    image: grafana/loki:2.9.1
+    container_name: loki
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    volumes:
+      # === MUDANÇA IMPORTANTE AQUI ===
+      - loki_data:/loki # Usando um volume nomeado
+      - ./loki-config.yaml:/etc/loki/local-config.yaml:ro
+    networks:
+      - ad_net
+
+  # ============================
+  # 5. PROMTAIL (LOG SHIPPER)
+  # ============================
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: promtail
+    volumes:
+      - ./promtail-config.yaml:/etc/promtail/config.yml
+      - ./mongo_logs:/var/log/mongodb
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+      - mongo-db
+    networks:
+      - ad_net
+
+  # ============================
+  # 6. GRAFANA
+  # ============================
+  grafana:
+    image: grafana/grafana:10.0.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - ad_net
+
+# ============================
+# VOLUMES
+# ============================
+volumes:
+  postgres_data:
+  mongo_data:
+  grafana_data:
+  loki_data: # === MUDANÇA IMPORTANTE AQUI ===
+
+# ============================
+# NETWORK
+# ============================
+networks:
+  ad_net:
+    driver: bridge

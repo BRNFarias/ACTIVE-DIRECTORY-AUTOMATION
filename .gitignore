@@ -1,4 +1,4 @@
-# Ambiente Virtual
+# Ambientes Virtuais
 venv/
 .venv/
 
@@ -9,16 +9,20 @@ venv/
 # Pasta SSL (Contém chaves privadas)
 ssl/
 
+# === DADOS E LOGS GERADOS ===
+# (Ignora as pastas de log do Loki, Mongo e API)
+loki/
+loki_data/
+mongo_logs/
+api_logs/
+*.log
+
 # Ficheiros temporários e cache do Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .pytest_cache/
-
-# Logs
-*.log
-logs/
 
 # Configurações de IDE
 .vscode/
@@ -33,6 +37,3 @@ Thumbs.db
 *.tar
 *.tar.gz
 *.rar
-
-# Ficheiro de certificado
-*.cer
