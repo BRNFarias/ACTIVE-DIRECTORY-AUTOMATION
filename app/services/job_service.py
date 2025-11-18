@@ -3,10 +3,9 @@ import os
 from datetime import datetime
 from app.models.job import Job
 from app.database.mongodb import log_event
-from app.services.ad_service import connect_ad, create_or_update_user 
+from app.services.ad_service import connect_ad, create_or_reactivate_user 
 
 def process_excel(file_path: str, db):
-    # --- LÊ A COLUNA "Nome" (da sua nova planilha) ---
     required_cols = ["Nome", "CPF", "Inicio", "Fim"]
 
     try:
@@ -19,13 +18,11 @@ def process_excel(file_path: str, db):
         log_event("Erro", f"Arquivo invalido: colunas obrigatorias ausentes ({file_path})")
         raise ValueError(f"Planilha invalida. Colunas obrigatorias {required_cols} ausentes")
     
-    # Cria registro no banco
     new_job = Job(filename=os.path.basename(file_path), status="processado", created_at=datetime.utcnow())
     db.add(new_job)
     db.commit()
     db.refresh(new_job)
 
-    # Log no Mongo
     try:
         log_event("Job", f"Arquivo {new_job.filename} processado com sucesso")
     except Exception as e:
@@ -41,31 +38,25 @@ def process_excel(file_path: str, db):
             usuarios_falhados = 0
             
             for index, row in df.iterrows():
-                
                 username_limpo = "".join(str(row['CPF']).split())
-                
-                # --- LÊ A COLUNA "Nome" ---
                 nome_completo_limpo = " ".join(str(row['Nome']).split())
-                
                 fim_date = row['Fim']
                 
                 if pd.isna(fim_date):
-                    print(f"Ignorando linha {index+1}: Data de Fim está em branco ou inválida.")
                     usuarios_falhados += 1
                     continue
 
                 if not username_limpo or not nome_completo_limpo:
-                    print(f"Ignorando linha {index+1} por dados ausentes (CPF ou Nome).")
                     usuarios_falhados += 1
                     continue 
 
-                password = "SenhaTemporaria123!" # (Não usada, mas necessária para a função)
+                password = "SenhaTemporaria123!" 
                 
-                sucesso = create_or_update_user(conn, 
-                                                nome_completo_limpo, 
-                                                username_limpo, 
-                                                password, 
-                                                fim_date)
+                sucesso = create_or_reactivate_user(conn, 
+                                                    nome_completo_limpo, 
+                                                    username_limpo, 
+                                                    password, 
+                                                    fim_date)
                 
                 if sucesso:
                     usuarios_sucesso += 1
@@ -73,14 +64,13 @@ def process_excel(file_path: str, db):
                     usuarios_falhados += 1
 
             print("--- PROCESSAMENTO AD CONCLUÍDO ---")
-            log_event("AD", f"Processamento concluído. {usuarios_sucesso} usuários criados/atualizados, {usuarios_falhados} falharam.")
+            log_event("AD", f"Processamento concluído. {usuarios_sucesso} usuários processados, {usuarios_falhados} falharam.")
         else:
             log_event("AD", "Falha ao conectar ao Active Directory")
     except Exception as e:
-        log_event("Erro", f"Falha ao criar usuários no AD: {e}")
+        log_event("Erro", f"Falha geral no AD: {e}")
         print(f"Erro na integração AD: {e}") 
 
-    # Retorno final
     return {
         "job_id": new_job.id,
         "rows": len(df),

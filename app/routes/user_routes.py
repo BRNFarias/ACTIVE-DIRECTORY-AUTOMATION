@@ -1,68 +1,43 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
-from app.services.ad_service import connect_ad, list_users, delete_user, create_or_update_user
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from datetime import datetime # <-- Importe o datetime
+# Importa a nova função de reativação
+from app.services.ad_service import connect_ad, list_users, create_or_reactivate_user
+from app.database.postgres import get_db
+from sqlalchemy.orm import Session
+from datetime import datetime, date
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
-# Define um "modelo" de como o utilizador será enviado via API
-class User(BaseModel):
-    nome: str
-    cpf: str
-    status: str
-
-# --- NOVO MODELO PARA CRIAÇÃO ---
 class UserCreate(BaseModel):
     nome: str
-    cpf: str
-    inicio: str # Recebemos como texto, ex: "2025-10-31"
-    fim: str    # Recebemos como texto, ex: "2026-10-31"
-    senha: str
+    username: str
+    password: str
+    fim_data: date 
 
-# ROTA 1: Listar todos os utilizadores (Já existe)
-@router.get("/", response_model=List[User])
-async def get_users_list(conn=Depends(connect_ad)):
+@router.get("/")
+def get_users_list():
+    conn = connect_ad()
     if not conn:
-        raise HTTPException(status_code=500, detail="Não foi possível conectar ao AD")
+        raise HTTPException(status_code=500, detail="Não foi possível conectar ao Active Directory")
+    
     users = list_users(conn)
-    return users
+    conn.unbind()
+    return {"users": users}
 
-# --- NOVA ROTA 2: Criar um utilizador ---
-@router.post("/")
-async def create_single_user(user: UserCreate, conn=Depends(connect_ad)):
+@router.post("/create")
+def create_new_user(user_data: UserCreate, db: Session = Depends(get_db)):
+    conn = connect_ad()
     if not conn:
-        raise HTTPException(status_code=500, detail="Não foi possível conectar ao AD")
-
-    try:
-        # Converte as datas de string (do JSON) para objetos datetime
-        # (O HTML envia no formato AAAA-MM-DD)
-        inicio_date = datetime.strptime(user.inicio, "%Y-%m-%d")
-        fim_date = datetime.strptime(user.fim, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Formato de data inválido. Use AAAA-MM-DD.")
-
-    sucesso = create_or_update_user(conn, 
-                                    user.nome, 
-                                    user.cpf, 
-                                    user.senha, 
-                                    fim_date)
+        raise HTTPException(status_code=500, detail="Não foi possível conectar ao Active Directory")
     
-    if not sucesso:
-        raise HTTPException(status_code=500, detail="Falha ao criar o usuário no AD (verifique os logs do Docker)")
-    
-    # Retorna o usuário criado no formato que a lista espera
-    return {"nome": user.nome, "cpf": user.cpf, "status": "Inativo (Criado)"}
+    # Converte date para datetime
+    fim_datetime = datetime.combine(user_data.fim_data, datetime.min.time())
 
+    # Usa a função que cria ou reativa
+    success = create_or_reactivate_user(conn, user_data.nome, user_data.username, user_data.password, fim_datetime)
+    conn.unbind()
 
-# ROTA 3: Excluir um utilizador (Já existe)
-@router.delete("/{username}")
-async def delete_user_by_username(username: str, conn=Depends(connect_ad)):
-    if not conn:
-        raise HTTPException(status_code=500, detail="Não foi possível conectar ao AD")
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Erro ao criar/reativar usuário {user_data.username}.")
     
-    sucesso = delete_user(conn, username)
-    
-    if not sucesso:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado ou falha ao deletar")
-    return {"message": "Usuário deletado com sucesso"}
+    return {"message": f"Usuário {user_data.username} processado com sucesso."}
