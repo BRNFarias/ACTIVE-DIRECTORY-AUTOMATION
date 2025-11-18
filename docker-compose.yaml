@@ -18,6 +18,8 @@ services:
       - mongo-db
     networks:
       - ad_net
+    volumes:
+      - ./api_logs:/app/logs
 
   # ============================
   # 2. POSTGRES
@@ -80,6 +82,7 @@ services:
     volumes:
       - ./promtail-config.yaml:/etc/promtail/config.yml
       - ./mongo_logs:/var/log/mongodb
+      - ./api_logs:/app/logs:ro
     command: -config.file=/etc/promtail/config.yml
     depends_on:
       - loki

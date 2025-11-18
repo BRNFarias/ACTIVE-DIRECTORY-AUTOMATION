@@ -3,23 +3,33 @@ server:
   grpc_listen_port: 0
 
 positions:
-  # Onde o Promtail salva seu progresso de leitura
   filename: /tmp/positions.yaml
 
 clients:
-  # Onde o Promtail envia os logs (o endereço do Loki)
   - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
+# =================================
+# 1. Job do MongoDB
+# =================================
 - job_name: mongodb
   static_configs:
   - targets:
       - localhost
     labels:
-      # Labels para você filtrar no Grafana
       job: mongodb
       service: active-directory-automation
-      
-      # === A CORREÇÃO ESTÁ AQUI ===
-      # O __path__ deve estar recuado DENTRO de 'labels'
       __path__: /var/log/mongodb/mongod.log
+
+# =================================
+# 2. Job da API (ESTE É O QUE FALTAVA)
+# =================================
+- job_name: fastapi
+  static_configs:
+  - targets:
+      - localhost
+    labels:
+      job: fastapi
+      service: active-directory-automation
+      # Caminho para o log DENTRO do container do Promtail
+      __path__: /app/logs/api.log
