@@ -37,3 +37,9 @@ Thumbs.db
 *.tar
 *.tar.gz
 *.rar
+
+#Ficheiros de certificado
+*.crt
+*.cer
+*.key
+*.pem

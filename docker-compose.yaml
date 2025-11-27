@@ -10,9 +10,8 @@ services:
     container_name: active-automation
     ports:
       - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql+psycopg2://admin:admin@postgres-db:5432/ad_jobs
-      - MONGO_URL=mongodb://admin:admin@mongo-db:27017/
+    env_file:
+      - .env
     depends_on:
       - postgres-db
       - mongo-db
@@ -114,7 +113,7 @@ volumes:
   postgres_data:
   mongo_data:
   grafana_data:
-  loki_data: # === MUDANÇA IMPORTANTE AQUI ===
+  loki_data: 
 
 # ============================
 # NETWORK

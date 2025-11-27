@@ -1,7 +1,8 @@
 from fastapi import APIRouter, UploadFile, File, Depends
+from app.services.ad_service import disable_expired_users_routine
 import shutil
 import os
-import logging # <--- 1. Adicione esta importação
+import logging
 from app.database.postgres import get_db
 from app.services.job_service import process_excel
 
@@ -24,7 +25,14 @@ async def upload_file(file: UploadFile = File(...), db=Depends(get_db)):
     
     os.remove(file_path)
 
-    # <--- 2. Adicione o log de sucesso AQUI
     logging.info(f"Upload da planilha '{file.filename}' concluído com sucesso.")
     
     return result
+
+@router.post("/cleanup")
+def cleanup_expired_users():
+    """
+    Rota manual para verificar usuários expirados e desabilitá-los visualmente.
+    """
+    result = disable_expired_users_routine()
+    return {"message": result}
