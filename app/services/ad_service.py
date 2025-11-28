@@ -60,7 +60,7 @@ def connect_ad():
             print(f"Erro fatal na conexão AD: {e}")
             return None
 
-# --- FUNÇÃO 1: LOGIN ---
+# --- FUNÇÃO 1: LOGIN (AGORA COM VERIFICAÇÃO DE GRUPO) ---
 def check_user_credentials(user_email, user_password):
     if not user_password:
         return None
@@ -70,6 +70,7 @@ def check_user_credentials(user_email, user_password):
         domain_suffix = DOMAIN_BASE_DN.replace('DC=', '').replace(',', '.')
         user_upn = f"{user_email}@{domain_suffix}"
     
+    # 1. Tenta autenticar (Verificar Senha)
     try:
         conn = Connection(
             Server(AD_SERVER, get_info=ALL, use_ssl=True, port=636),
@@ -82,25 +83,64 @@ def check_user_credentials(user_email, user_password):
             ntlm_user = f"{domain}\\{username_part}"
             conn = Connection(Server(AD_SERVER, get_info=ALL, port=389), user=ntlm_user, password=user_password, authentication=NTLM, auto_bind=True)
         except LDAPException:
+            print(f"Falha de autenticação (senha incorreta) para: {user_email}")
             return None
 
+    # 2. Se autenticou, verifica se é ADMIN
     try:
         search_filter = f'(&(objectClass=user)(userPrincipalName={user_upn}))'
-        conn.search(search_base=DOMAIN_BASE_DN, search_filter=search_filter, search_scope=SUBTREE, attributes=['displayName', 'sAMAccountName', 'userPrincipalName'])
+        # Adicionei 'memberOf' na busca
+        conn.search(search_base=DOMAIN_BASE_DN, 
+                    search_filter=search_filter, 
+                    search_scope=SUBTREE, 
+                    attributes=['displayName', 'sAMAccountName', 'userPrincipalName', 'memberOf'])
         
         if not conn.entries:
-             conn.search(search_base=DOMAIN_BASE_DN, search_filter=f'(&(objectClass=user)(sAMAccountName={user_email.split("@")[0]}))', search_scope=SUBTREE, attributes=['displayName', 'userPrincipalName', 'sAMAccountName'])
+             conn.search(search_base=DOMAIN_BASE_DN, 
+                         search_filter=f'(&(objectClass=user)(sAMAccountName={user_email.split("@")[0]}))', 
+                         search_scope=SUBTREE, 
+                         attributes=['displayName', 'userPrincipalName', 'sAMAccountName', 'memberOf'])
         
         if conn.entries:
             user_entry = conn.entries[0]
+            
+            # --- VERIFICAÇÃO DE GRUPO ---
+            groups = user_entry.memberOf.value if 'memberOf' in user_entry else []
+            # Garante que seja uma lista (se o usuário tiver só 1 grupo, o LDAP as vezes retorna string)
+            if isinstance(groups, str):
+                groups = [groups]
+            
+            # Grupos permitidos (Inglês e Português)
+            # CN=Domain Admins, CN=Administrators, CN=Admins do Dominio, etc.
+            admin_keywords = ["Domain Admins", "Administrators", "Admins do Dominio", "Administradores", "Enterprise Admins"]
+            
+            is_admin = False
+            for group_dn in groups:
+                # O group_dn vem assim: "CN=Domain Admins,CN=Users,DC=skynex,DC=local"
+                for keyword in admin_keywords:
+                    # Verifica se o nome do grupo está dentro do DN
+                    if f"CN={keyword}," in group_dn:
+                        is_admin = True
+                        break
+                if is_admin:
+                    break
+            
+            if not is_admin:
+                print(f"Login recusado: Usuário {user_email} autenticou, mas NÃO é Admin.")
+                return None
+            # ---------------------------
+
             return {
                 "nome": str(user_entry.displayName),
                 "email": str(user_entry.userPrincipalName) if 'userPrincipalName' in user_entry else user_upn,
                 "cpf": str(user_entry.sAMAccountName)
             }
-    except Exception:
+            
+    except Exception as e:
+        print(f"Erro ao verificar grupos: {e}")
         pass
-    return {"nome": user_email, "email": user_upn, "cpf": user_email.split('@')[0]}
+
+    return None # Retorna None se falhar na busca ou não for admin
 
 # --- FUNÇÃO 2: LISTAR UTILIZADORES ---
 def list_users(conn):
@@ -147,7 +187,6 @@ def create_or_reactivate_user(conn, nome, username, password, fim_date: datetime
                 search_scope=SUBTREE) 
 
     if len(conn.entries) > 0:
-        # CORREÇÃO AQUI: Usar entry_dn em vez de dn
         user_dn = conn.entries[0].entry_dn 
         print(f"--- REATIVANDO/ATUALIZANDO USUÁRIO: {username} ---")
         
@@ -223,7 +262,6 @@ def disable_expired_users_routine():
                     new_uac = current_uac | 2 
                     
                     try:
-                        # CORREÇÃO AQUI: Usar entry_dn em vez de dn
                         conn.modify(entry.entry_dn, {'userAccountControl': [(MODIFY_REPLACE, [str(new_uac)])]})
                         if conn.result['description'] == 'success':
                             count_disable += 1
