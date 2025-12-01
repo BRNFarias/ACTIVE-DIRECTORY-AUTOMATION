@@ -6,7 +6,7 @@ import ssl
 import os
 from dotenv import load_dotenv
 
-# --- Correção do MD4 ---
+# Permitir MD4 (necessário para alguns ADs mais antigos)
 ldap3.HASH_MD4_NOT_SUPPORTED = True
 
 # Carrega as variáveis do arquivo .env

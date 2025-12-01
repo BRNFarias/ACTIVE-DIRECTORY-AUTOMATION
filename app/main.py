@@ -50,7 +50,7 @@ app.add_middleware(
 )
 # --- FIM DO CORS ---
 
-# (Removido: Rota /metrics do Prometheus)
+
 
 # Registra as rotas
 app.include_router(job_routes.router)

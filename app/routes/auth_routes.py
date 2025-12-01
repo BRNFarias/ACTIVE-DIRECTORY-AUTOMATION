@@ -5,7 +5,7 @@ from app.services.ad_service import check_user_credentials
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 class LoginRequest(BaseModel):
-    email: str # O front-end envia 'email'
+    email: str 
     senha: str
 
 @router.post("/login")

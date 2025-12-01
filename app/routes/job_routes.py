@@ -19,7 +19,6 @@ async def upload_file(file: UploadFile = File(...), db=Depends(get_db)):
         result = process_excel(file_path, db)
     except Exception as e:
         os.remove(file_path)
-        # Opcional: Você pode logar o erro aqui também se quiser
         logging.error(f"Erro ao processar planilha '{file.filename}': {e}")
         return{"error": str(e)}
     
