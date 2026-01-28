@@ -8,3 +8,4 @@ openpyxl
 ldap3
 python-dotenv
 python-multipart
+pycryptodome
